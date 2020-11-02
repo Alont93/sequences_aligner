@@ -16,21 +16,46 @@ GLOBAL_TEST_CASES = [
 ]
 
 OVERLAP_TEST_CASES = [
-    ("AATTGC", "GCAATT", 30, "AATTGC", "AATTGC"),
-    ("AATTG", "CAATT", 25, "AATTG", "AATTG"),
-    ("AT", "T", 5, "AT", "A-"),
+    ("AATTGC", "AATTGC", 30, "AATTGC", "AATTGC"),
+    ("AATTG", "AATTG", 25, "AATTG", "AATTG"),
+    ("AT", "A", 5, "AT", "A-"),
     ("A", "AT", 5, "A-", "AT"),
-    ("CATTCAG", "CTCGAAGC", 14, "-CATTC-AG", "GC-TTCGAG"),
-    ("GCTTCGAG", "CTGAATG", 14, "GC-TTCGAG", "-CATTC-AG"),
-    ("ATC", "GCT", 6, "ATC", "AGC"),
-    ("AGC", "GAT", 6, "AGC", "ATC"),
-    ("ATC", "CGA", 10, "ATC-", "-TCG"),
-    ("TCG", "GAT", 10, "-TCG", "ATC-"),
-    ("ATCGATCG", "GTGT", 2, "--ATCGATCG", "ACA-C-----"),
-    ("ACAC", "CGATCGAT", 2, "ACA-C-----", "--ATCGATCG"),
-    ("ATCGATCG", "CGATC", 25, "ATCGATCG", "---GATCG"),
-    ("GATCG", "CGATCGAT", 25, "---GATCG", "ATCGATCG"),
+    ("CATTCAG", "GCTTCGAG", 14, "-CATTC-AG", "GC-TTCGAG"),
+    ("GCTTCGAG", "CATTCAG", 14, "GC-TTCGAG", "-CATTC-AG"),
+    ("ATC", "AGC", 6, "ATC", "AGC"),
+    ("AGC", "ATC", 6, "AGC", "ATC"),
+    ("ATC", "TCG", 10, "ATC-", "-TCG"),
+    ("TCG", "ATC", 10, "-TCG", "ATC-"),
+    ("TTTCCC", "AAATTT", 15, "---TTTCCC", "AAATTT---"),
+    ("ATCGATCG", "ACAC", 2, "--ATCGATCG", "ACA-C-----"),
+    ("ACAC", "ATCGATCG", 2, "ACA-C-----", "--ATCGATCG"),
+    ("ATCGATCG", "GATCG", 25, "ATCGATCG", "---GATCG"),
+    ("GATCG", "ATCGATCG", 25, "---GATCG", "ATCGATCG"),
 ]
+
+LOCAL_TEST_CASES = [
+    ("AATTGC", "AATTGC", 30, "AATTGC", "AATTGC"),
+    ("AATTG", "AATTG", 25, "AATTG", "AATTG"),
+    ("AT", "A", 5, "A", "A"),
+    ("A", "AT", 5, "A", "A"),
+    ("CATTCAG", "GCTTCGAG", 17, "TTC-AG", "TTCGAG"),
+    ("GCTTCGAG", "CATTCAG", 17, "TTCGAG", "TTC-AG"),
+    ("ATC", "AGC", 6, "ATC", "AGC"),
+    ("AGC", "ATC", 6, "AGC", "ATC"),
+    ("ATC", "TCG", 10, "TC", "TC"),
+    ("TCG", "ATC", 10, "TC", "TC"),
+    ("ATCGATCG", "GATCG", 25, "GATCG", "GATCG"),
+    ("GATCG", "ATCGATCG", 25, "GATCG", "GATCG"),
+    ("GAGATCGAGATT", "TCTCGATAGCGC", 21, "TCGAGA", "TCGATA"),
+    ("TATGTCCGATAGCGC", "GAGATGTGATATT", 24, "ATGTCCGATA", "ATGT--GATA"),
+]
+
+OUTPUT_TEST_CASE = (
+    "CCCCCCCCCACCCCCCCCCCGGGGGGGGGGTTTTTTTTTTCCCCCCCCCCGGGGGGGGGGTTTTTTTTTT",
+    "A", 5,
+    "CCCCCCCCCACCCCCCCCCCGGGGGGGGGGTTTTTTTTTTCCCCCCCCCCGGGGGGGGGGTTTTTTTTTT",
+    "---------A------------------------------------------------------------"
+)
 
 FILE_A = ".a.fasta"
 FILE_B = ".b.fasta"
@@ -55,7 +80,7 @@ def setup():
 
 
 def parse_res(res_output):
-    seq_re = re.compile(r'^[AGCT\-]+$')
+    seq_re = re.compile(r'^[AGCT\-]{1,50}$')
     result_re = re.compile(r'^(?P<type>(global|local|overlap))[ \t]*:[ \t]*(?P<score>-?\d+)$')
     is_a = True
     result_reached = False
@@ -92,36 +117,49 @@ def parse_res(res_output):
     return seq_a, seq_b, align_type, score
 
 
-def check_output(res_output, align_type, expected_score, expected_a, expected_b):
+def check_output(res_output, align_type, expected_score, expected_a, expected_b, ignore_score):
     seq_a, seq_b, found_type, score = parse_res(res_output)
 
     assert seq_a == expected_a, os.linesep.join(["Mismatch in seq a", "Result output is:", res_output])
     assert seq_b == expected_b, os.linesep.join(["Mismatch in seq b", "Result output is:", res_output])
     assert found_type == align_type, os.linesep.join(["Mismatch in align type", "Result output is:", res_output])
-    assert expected_score == score, os.linesep.join(["Mismatch in score", "Result output is:", res_output])
+    if not ignore_score:
+        assert expected_score == score, os.linesep.join(["Mismatch in score", "Result output is:", res_output])
 
 
-def run_test(test_case, align_type):
+def run_test(test_case, align_type, ignore_score=False):
     cmd = ["python", SEQ_ALIGN, FILE_A, FILE_B, "--align_type", align_type, "--score", "score_matrix.tsv"]
 
     write_files(test_case[0], test_case[1])
 
     res = subprocess.run(cmd, capture_output=True)
-    check_output(res.stdout.decode("utf-8"), align_type, test_case[2], test_case[3], test_case[4])
+
+    assert "err" not in res.stderr.decode("utf-8").lower()
+
+    check_output(res.stdout.decode("utf-8"), align_type, test_case[2], test_case[3], test_case[4],
+                 ignore_score=ignore_score)
+
+
+def test_output():
+    for align_type in ("global", "overlap"):
+        run_test(OUTPUT_TEST_CASE, align_type, ignore_score=True)
 
 
 def test_global():
     for test_case in GLOBAL_TEST_CASES:
         run_test(test_case, "global")
 
-    print('all good global')
-
 
 def test_overlap():
     for test_case in OVERLAP_TEST_CASES:
         run_test(test_case, "overlap")
 
-    print('all good overlap')
+
+def test_local():
+    for test_case in LOCAL_TEST_CASES:
+        run_test(test_case, "local")
+
 
 if __name__ == '__main__':
     test_overlap()
+    print("done!")

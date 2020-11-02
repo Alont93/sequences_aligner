@@ -12,8 +12,8 @@ class OverlapSequenceAligner(SequenceAligner):
         cost = np.zeros((len(seq1), len(seq2)), dtype=np.int32)
         trace = np.zeros((len(seq1), len(seq2)), dtype=np.int8)
 
-        cost[0, 1:] = np.cumsum(self._score_matrix[seq2[1:], -1])
-        cost[1:, 0] = 0
+        cost[0, 1:] = 0
+        cost[1:, 0] = np.cumsum(self._score_matrix[seq2[1:], -1])
         trace[0, 1:] = Direction.LEFT.value
         trace[1:, 0] = Direction.UP.value
         trace[0, 0] = Direction.STOP.value
@@ -23,9 +23,9 @@ class OverlapSequenceAligner(SequenceAligner):
                 x, y = seq1[i], seq2[j]
 
                 opts = {
+                    Direction.DIAG.value: cost[i - 1, j - 1] + self._score_matrix[x, y],
                     Direction.UP.value: cost[i - 1, j] + self._score_matrix[x, -1],
                     Direction.LEFT.value: cost[i, j - 1] + self._score_matrix[-1, y],
-                    Direction.DIAG.value: cost[i - 1, j - 1] + self._score_matrix[x, y]
                 }
 
                 cost[i, j] = max(opts.values())
@@ -37,7 +37,11 @@ class OverlapSequenceAligner(SequenceAligner):
         arr1 = []
         arr2 = []
 
-        i, j = pd_trace.shape[0] - 1, pd_trace.shape[1] - 1
+        # i, j = pd_trace.shape[0] - 1, pd_trace.shape[1] - 1
+        j = pd_trace.shape[1] - 1
+        i = pd_cost.to_numpy()[1:, -1].argmax() + 1
+        orig_i = i
+        orig_j = j
         score = pd_cost.iloc[i, j]
 
         end_of_alignment_reached = False
@@ -62,4 +66,9 @@ class OverlapSequenceAligner(SequenceAligner):
 
         algn1 = ''.join(arr1)[::-1]
         algn2 = ''.join(arr2)[::-1]
+        algn2 += '-' * (pd_trace.shape[0] - orig_i -1)
+        len_match = -pd_trace.shape[0] + orig_i + 1
+        rest_of_seq1 = pd_trace.index[len(pd_trace.index) - len_match:]
+        algn1 += "".join(rest_of_seq1)
+
         return algn1, algn2, score
